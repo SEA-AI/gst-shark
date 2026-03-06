@@ -1135,6 +1135,46 @@ do_print_buffer_event (event_id id, const gchar * pad, GstClockTime pts,
 }
 
 void
+do_print_detection_count_event (event_id id, const gchar * pad,
+    GstClockTime pts, guint32 count)
+{
+  GError *error;
+  guint8 *mem;
+  guint8 *event_mem;
+  gsize event_size;
+
+  event_size =
+      strlen (pad) + 1 + sizeof (guint64) + sizeof (guint32) + CTF_HEADER_SIZE;
+
+  if (event_exceeds_mem_size (event_size)) {
+    return;
+  }
+
+  mem = ctf_descriptor->mem;
+  event_mem = mem + TCP_HEADER_SIZE;
+
+  g_mutex_lock (&ctf_descriptor->mutex);
+
+  CTF_EVENT_WRITE_HEADER (id, event_mem);
+  CTF_EVENT_WRITE_STRING (pad, event_mem);
+  CTF_EVENT_WRITE_INT64 (pts, event_mem);
+  CTF_EVENT_WRITE_INT32 (count, event_mem);
+
+  if (FALSE == ctf_descriptor->file_output_disable) {
+    event_mem -= event_size;
+    fwrite (event_mem, sizeof (gchar), event_size, ctf_descriptor->datastream);
+  }
+
+  if (FALSE == ctf_descriptor->tcp_output_disable) {
+    TCP_EVENT_HEADER_WRITE (TCP_DATASTREAM_ID, event_size, mem);
+    g_output_stream_write (ctf_descriptor->output_stream,
+        ctf_descriptor->mem, event_size + TCP_HEADER_SIZE, NULL, &error);
+  }
+
+  g_mutex_unlock (&ctf_descriptor->mutex);
+}
+
+void
 do_print_ctf_init (event_id id)
 {
   GError *error;

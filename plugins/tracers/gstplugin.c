@@ -34,6 +34,9 @@
 #include "gstqueuelevel.h"
 #include "gstbitrate.h"
 #include "gstbuffer.h"
+#ifdef GST_NVDS_ENABLE
+#include "gstdetectioncount.h"
+#endif
 #include "gstctf.h"
 
 static gboolean
@@ -74,6 +77,12 @@ plugin_init (GstPlugin * plugin)
   if (!gst_tracer_register (plugin, "buffer", gst_buffer_tracer_get_type ())) {
     return FALSE;
   }
+#ifdef GST_NVDS_ENABLE
+  if (!gst_tracer_register (plugin, "detectioncount",
+          gst_detection_count_tracer_get_type ())) {
+    return FALSE;
+  }
+#endif
 
   return TRUE;
 }

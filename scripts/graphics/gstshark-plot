@@ -109,11 +109,12 @@ do
     esac
 done
 
-processing_tracer_list=("proctime" "interlatency" "framerate" "scheduling" "cpuusage" "bitrate" "queuelevel" "buffer")
+processing_tracer_list=("proctime" "interlatency" "framerate" "scheduling" "cpuusage" "bitrate" "queuelevel" "buffer" "detectioncount")
 parser_group_list1=("proctime" "interlatency" "scheduling" "framerate" "bitrate")
 parser_group_list2=("cpuusage")
 parser_group_list3=("buffer")
 parser_queuelevel=("queuelevel")
+parser_detectioncount=("detectioncount")
 
 #
 rm -f tracer.pdf
@@ -188,6 +189,16 @@ do
     awk '{gsub(",",""); print}' ${tracer}.tmp > ${tracer}.mat
 done
 
+# Parse detectioncount: fields are pad (col 10), pts (col 13), count (col 16).
+# We use the pad as the series name and count as the plotted value.
+for tracer in "${parser_detectioncount[@]}"
+do
+    echo "Loading ${tracer} events..."
+    grep -w ${tracer} datastream.log > ${tracer}.log
+    awk '{print $1,$10,$16}' ${tracer}.log > ${tracer}.tmp
+    awk '{gsub(",",""); print}' ${tracer}.tmp > ${tracer}.mat
+done
+
 # Create plots
 octave -qf ${PERSIST} ${SCRIPT_DIR}/gstshark-plot.m "${processing_tracer_list[@]}" "${SAVEFIG}" "${FORMAT}" "${LEGEND}"
 
@@ -214,4 +225,9 @@ done
 for tracer in "${parser_group_list3[@]}"
 do
     rm ${tracer}.log ${tracer}.mat ${tracer}.tmp -f
+done
+
+for tracer in "${parser_detectioncount[@]}"
+do
+    rm ${tracer}.log ${tracer}.tmp ${tracer}.mat -f
 done

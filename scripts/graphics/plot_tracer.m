@@ -351,6 +351,39 @@ function plot_tracer(tracer,savefig,format,legend_location)
         end
     end
 
+    # Plot Detection count
+    if (1 == isfield(tracer,'detectioncount'))
+        timestamp_max = max(max(tracer.detectioncount.timestamp_mat));
+        timestamp_min = min(min(tracer.detectioncount.timestamp_mat));
+
+        figure('Name','Detection count')
+        stairs(tracer.detectioncount.timestamp_mat', tracer.detectioncount.count_mat', 'linewidth', LINEWIDTH)
+        title('Detection count (TrackerObjects per buffer)','fontsize',FONTSIZE)
+        xlabel('time (seconds)','fontsize',FONTSIZE)
+        ylabel('Number of detections','fontsize',FONTSIZE)
+        xlim([timestamp_min,timestamp_max])
+        ylim([0, max(1, max(max(tracer.detectioncount.count_mat))) + 1])
+        if (0 == strcmp(legend_location,'extern'))
+            legend(str2latex(tracer.detectioncount.pad_name_list),'Location',legend_location)
+        end
+
+        if (TRUE == savefig)
+            disp('Save detectioncount figure...')
+            switch format
+                case 'pdf'
+                    print tracer -dpdf -append
+                case 'png'
+                    print('detectioncount','-dpng');
+                otherwise
+                    printf('octave: WARN: %s is not supported',format)
+            end
+        end
+        # Create a new figure if the legend location is extern
+        if (1 == strcmp(legend_location,'extern'))
+            plot_legend(tracer.detectioncount.pad_name_list,'Detection count legend',savefig,'detectioncount_legend',format)
+        end
+    end
+
     # Plot Buffer time
     if (1 == isfield(tracer,'buffer'))
         # Calculate the greatest time value
