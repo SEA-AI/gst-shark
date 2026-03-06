@@ -34,7 +34,7 @@ void gst_proctime_add_new_element (GstProcTime * proc_time,
 
 gboolean gst_proctime_proc_time (GstProcTime * proc_time,
     GstClockTime * time, GstPad * peer_pad, GstPad * src_pad,
-    GstClockTime ts, gboolean do_calculation);
+    GstClockTime ts, gboolean do_calculation, gboolean record_start);
 
 void gst_proctime_free (GstProcTime * proc_time);
 

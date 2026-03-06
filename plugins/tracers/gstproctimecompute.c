@@ -157,7 +157,7 @@ out:
 gboolean
 gst_proctime_proc_time (GstProcTime * proc_time, GstClockTime * time,
     GstPad * peer_pad, GstPad * src_pad, GstClockTime ts,
-    gboolean do_calculation)
+    gboolean do_calculation, gboolean record_start)
 {
   GstProcTimeElement *element;
   GstClockTime stop_time;
@@ -174,11 +174,20 @@ gst_proctime_proc_time (GstProcTime * proc_time, GstClockTime * time,
   /* Search the peer pad in the list 
    * The peer pad is used to identify which is the element where the 
    * buffer is received.
+   * Only record the start timestamp when record_start is TRUE; otherwise
+   * leave start_time at GST_CLOCK_TIME_NONE so the subsequent compute
+   * pass is silently skipped (e.g. when infer-only mode is active and
+   * bInferDone is not set on the buffer).
    */
   for (elem_idx = 0; elem_idx < elem_num; ++elem_idx) {
     element = g_list_nth_data (proc_time->elements, elem_idx);
     if (element->sink_pad == peer_pad) {
-      element->start_time = ts;
+      if (record_start) {
+        element->start_time = ts;
+      } else {
+        /* Mark as "not started" so compute is skipped cleanly. */
+        element->start_time = GST_CLOCK_TIME_NONE;
+      }
     }
   }
 
@@ -194,6 +203,11 @@ gst_proctime_proc_time (GstProcTime * proc_time, GstClockTime * time,
   for (elem_idx = 0; elem_idx < elem_num; ++elem_idx) {
     element = g_list_nth_data (proc_time->elements, elem_idx);
     if (element->src_pad == src_pad) {
+      /* Silently skip if start was never recorded (infer-only skipped it). */
+      if (element->start_time == GST_CLOCK_TIME_NONE) {
+        found = FALSE;
+        goto exit;
+      }
       stop_time = ts;
       if (stop_time > element->start_time) {
         *time = stop_time - element->start_time;
