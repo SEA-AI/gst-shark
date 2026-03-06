@@ -61,7 +61,8 @@ libgst_shark_tracers_src_files = [
   'gstframerate.c',
   'gstqueuelevel.c',
   'gstbitrate.c',
-  'gstbuffer.c'
+  'gstbuffer.c',
+  'gstdetectioncount.c',
 ]
 
 gst_shark_tracers_plugins = both_libraries('gstsharktracers',
@@ -69,7 +70,7 @@ gst_shark_tracers_plugins = both_libraries('gstsharktracers',
   c_args : libgst_shark_c_args,
   version : gst_shark_version_short,
   include_directories : configinc,
-  dependencies : [gst_shark_tracers_deps, lib_gst_shark_dep],
+  dependencies : [gst_shark_tracers_deps, lib_gst_shark_dep, nvds_tracer_dep],
   install : true,
   install_dir : plugins_install_dir,
 )

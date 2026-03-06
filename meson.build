@@ -217,6 +217,39 @@ gnome = import('gnome')
 # Imports pkgconfig module
 pkgconfig = import('pkgconfig')
 
+# Optional: NVIDIA DeepStream — enables the detectioncount TrackerObject tracer.
+# Searches for gstnvdsmeta.h in the default DeepStream installation path.
+# Set nvds_inc_dir / nvds_lib_dir to override.
+nvds_inc_path = get_option('nvds-inc-dir')
+if nvds_inc_path == ''
+  nvds_inc_path = '/opt/nvidia/deepstream/deepstream/sources/includes'
+endif
+nvds_lib_path = get_option('nvds-lib-dir')
+if nvds_lib_path == ''
+  nvds_lib_path = '/opt/nvidia/deepstream/deepstream/lib'
+endif
+
+nvds_available = cc.has_header('gstnvdsmeta.h',
+    args: ['-I' + nvds_inc_path],
+    required: false)
+
+if nvds_available
+  nvds_tracer_dep = declare_dependency(
+      link_args: [
+        '-L' + nvds_lib_path,
+        '-lnvdsgst_meta',
+        '-lnvds_meta',
+      ],
+      include_directories: include_directories(nvds_inc_path))
+  cdata.set('GST_NVDS_ENABLE', 1,
+      description: 'Enable NvDs-based features')
+  message('NVIDIA DeepStream found — NvDs-based features enabled')
+else
+  # Empty dependency — tracer compiles but counting is always 0
+  nvds_tracer_dep = declare_dependency()
+  warning('NVIDIA DeepStream not found — detectioncount tracer disabled (no counting)')
+endif
+
 # Meson will generate a header file all the entries in the configuration data object
 configure_file(output : 'config.h', configuration : cdata)
 

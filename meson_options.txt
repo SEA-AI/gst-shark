@@ -9,3 +9,9 @@ option('package-name', type : 'string', yield : true,
        description : 'Package name to use in plugins')
 option('package-origin', type : 'string', value : 'Unknown package origin', yield : true,
        description : 'Package origin URL to use in plugins')
+
+# NVIDIA DeepStream options (for the detectioncount tracer)
+option('nvds-inc-dir', type : 'string', value : '',
+       description : 'Path to DeepStream include directory (default: /opt/nvidia/deepstream/deepstream/sources/includes)')
+option('nvds-lib-dir', type : 'string', value : '',
+       description : 'Path to DeepStream lib directory (default: /opt/nvidia/deepstream/deepstream/lib)')

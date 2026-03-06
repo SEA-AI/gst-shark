@@ -49,6 +49,9 @@ for i = 1:nargin
         case 'buffer'
 	    disp('Processing buffer...')
 	    plot_buffer
+        case 'detectioncount'
+            disp('Processing detectioncount...')
+            plot_detectioncount
         case '--savefig'
             GSTSHARK_SAVEFIG = TRUE;
         case 'png'

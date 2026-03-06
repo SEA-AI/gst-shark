@@ -35,6 +35,7 @@ typedef enum
   QUEUE_LEVEL_EVENT_ID,
   BITRATE_EVENT_ID,
   BUFFER_EVENT_ID,
+  DETECTION_COUNT_EVENT_ID,
 } event_id;
 
 gchar *get_ctf_path_name (void);
@@ -54,6 +55,8 @@ void do_print_buffer_event (event_id id, const gchar * pad, GstClockTime pts,
     GstClockTime dts, GstClockTime duration, guint64 offset,
     guint64 offset_end, guint64 size, GstBufferFlags flags,
     guint32 refcount);
+void do_print_detection_count_event (event_id id, const gchar * pad,
+    GstClockTime pts, guint32 count);
 void do_print_ctf_init (event_id id);
 G_END_DECLS
 #endif /*__GST_CTF_H__*/
