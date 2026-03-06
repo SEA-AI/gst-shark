@@ -254,7 +254,6 @@ static void
 gst_detection_count_tracer_class_init (GstDetectionCountTracerClass * klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-  gchar *metadata_event;
 
   gobject_class->constructed = gst_detection_count_tracer_constructed;
 
@@ -283,11 +282,6 @@ gst_detection_count_tracer_class_init (GstDetectionCountTracerClass * klass)
           "max", G_TYPE_UINT, G_MAXUINT,
           NULL),
       NULL);
-
-  metadata_event = g_strdup_printf (detection_count_metadata_event,
-      DETECTION_COUNT_EVENT_ID, 0);
-  add_metadata_event_struct (metadata_event);
-  g_free (metadata_event);
 }
 
 static void
@@ -319,6 +313,11 @@ gst_detection_count_tracer_constructed (GObject * object)
 
   /* Chain up so the parent constructed runs first (calls gst_ctf_init). */
   G_OBJECT_CLASS (gst_detection_count_tracer_parent_class)->constructed (object);
+
+  gchar *metadata_event = g_strdup_printf (detection_count_metadata_event,
+      DETECTION_COUNT_EVENT_ID, 0);
+  add_metadata_event_struct (metadata_event);
+  g_free (metadata_event);
 
 #ifdef GST_NVDS_ENABLE
   /* Read the optional "infer-only" param.
