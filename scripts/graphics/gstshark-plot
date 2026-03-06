@@ -109,8 +109,8 @@ do
     esac
 done
 
-processing_tracer_list=("proctime" "interlatency" "framerate" "scheduling" "cpuusage" "bitrate" "queuelevel" "buffer" "detectioncount")
-parser_group_list1=("proctime" "interlatency" "scheduling" "framerate" "bitrate")
+processing_tracer_list=("proctime" "interlatency" "framerate" "scheduling" "cpuusage" "bitrate" "queuelevel" "buffer" "detectioncount" "rangetime")
+parser_group_list1=("proctime" "interlatency" "scheduling" "framerate" "bitrate" "rangetime")
 parser_group_list2=("cpuusage")
 parser_group_list3=("buffer")
 parser_queuelevel=("queuelevel")

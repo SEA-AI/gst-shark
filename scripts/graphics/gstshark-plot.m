@@ -34,6 +34,9 @@ for i = 1:nargin
         case 'proctime'
             disp('Processing proctime...')
             plot_proctime
+        case 'rangetime'
+            disp('Processing rangetime...')
+            plot_rangetime
         case 'interlatency'
             disp('Processing interlatency...')
             plot_interlatency
