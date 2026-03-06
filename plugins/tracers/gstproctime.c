@@ -27,6 +27,12 @@
 #include "gstproctimecompute.h"
 #include "gstproctime.h"
 #include "gstctf.h"
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
+#ifdef GST_NVDS_ENABLE
+#include <gstnvdsmeta.h>
+#endif
 
 GST_DEBUG_CATEGORY_STATIC (gst_proc_time_debug);
 #define GST_CAT_DEFAULT gst_proc_time_debug
@@ -41,6 +47,13 @@ struct _GstProcTimeTracer
   GstSharkTracer parent;
 
   GstProcTime *proc_time;
+
+#ifdef GST_NVDS_ENABLE
+  /* When TRUE, only record/log processing times for buffers that have
+   * bInferDone set on their NvDsBatchMeta (i.e. inference was performed).
+   * Activated via GST_TRACERS="proctime(infer-only=true)". */
+  gboolean infer_only;
+#endif
 };
 
 #define _do_init \
@@ -65,7 +78,8 @@ static const gchar proc_time_metadata_event[] = "event {\n\
 \n";
 
 static void
-do_push_buffer_pre (GstTracer * self, guint64 ts, GstPad * pad)
+do_push_buffer_pre (GstTracer * self, guint64 ts, GstPad * pad,
+    GstBuffer * buffer)
 {
   GstProcTimeTracer *proc_time_tracer;
   GstSharkTracer *shark_tracer;
@@ -77,6 +91,7 @@ do_push_buffer_pre (GstTracer * self, guint64 ts, GstPad * pad)
   gchar *time_string;
   gboolean should_log;
   gboolean should_calculate;
+  gboolean record_start = TRUE;
 
   proc_time_tracer = GST_PROC_TIME_TRACER (self);
   shark_tracer = GST_SHARK_TRACER (proc_time_tracer);
@@ -89,9 +104,25 @@ do_push_buffer_pre (GstTracer * self, guint64 ts, GstPad * pad)
   }
 
   should_calculate = gst_shark_tracer_element_is_filtered (shark_tracer, name);
+
+#ifdef GST_NVDS_ENABLE
+  /* When infer-only mode is active, only record start time and log elapsed
+   * time for buffers on which inference was actually performed. */
+  if (proc_time_tracer->infer_only) {
+    NvDsBatchMeta *batch_meta = gst_buffer_get_nvds_batch_meta (buffer);
+    if (batch_meta && batch_meta->frame_meta_list) {
+      NvDsFrameMeta *frame_meta =
+          (NvDsFrameMeta *) batch_meta->frame_meta_list->data;
+      record_start = (gboolean) frame_meta->bInferDone;
+    } else {
+      record_start = FALSE;
+    }
+  }
+#endif /* GST_NVDS_ENABLE */
+
   should_log =
       gst_proctime_proc_time (proc_time, &time, pad_peer, pad, ts,
-      should_calculate);
+      should_calculate, record_start);
 
   if (should_log) {
     time_string = g_strdup_printf ("%" GST_TIME_FORMAT, GST_TIME_ARGS (time));
@@ -158,6 +189,9 @@ gst_proc_time_tracer_init (GstProcTimeTracer * self)
   GstTracer *tracer = GST_TRACER (self);
 
   self->proc_time = gst_proctime_new ();
+#ifdef GST_NVDS_ENABLE
+  self->infer_only = FALSE;
+#endif
 
   gst_tracing_register_hook (tracer, "pad-push-pre",
       G_CALLBACK (do_push_buffer_pre));
@@ -170,10 +204,27 @@ gst_proc_time_tracer_init (GstProcTimeTracer * self)
 static void
 gst_proc_time_tracer_constructed (GObject *object)
 {
+  GstProcTimeTracer *self = GST_PROC_TIME_TRACER (object);
+  GstSharkTracer *shark_tracer = GST_SHARK_TRACER (object);
   gchar *metadata_event = NULL;
 
   /* chain up so parent constructed runs first (calls gst_ctf_init) */
   G_OBJECT_CLASS (gst_proc_time_tracer_parent_class)->constructed (object);
+
+#ifdef GST_NVDS_ENABLE
+  /* Read the optional "infer-only" param.
+   * Usage: GST_TRACERS="proctime(infer-only=true)"
+   * When enabled, only buffers that have bInferDone set on their
+   * NvDsBatchMeta are timed; non-inference buffers are silently skipped. */
+  GList *param_infer = gst_shark_tracer_get_param (shark_tracer, "infer-only");
+  if (param_infer != NULL) {
+    const gchar *val = (const gchar *) param_infer->data;
+    self->infer_only = (g_ascii_strcasecmp (val, "true") == 0 ||
+        g_strcmp0 (val, "1") == 0);
+    GST_INFO_OBJECT (self, "infer-only mode: %s",
+        self->infer_only ? "enabled" : "disabled");
+  }
+#endif /* GST_NVDS_ENABLE */
 
   metadata_event =
       g_strdup_printf (proc_time_metadata_event, PROCTIME_EVENT_ID, 0);
