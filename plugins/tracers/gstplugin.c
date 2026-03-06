@@ -37,6 +37,7 @@
 #ifdef GST_NVDS_ENABLE
 #include "gstdetectioncount.h"
 #endif
+#include "gstrangetime.h"
 #include "gstctf.h"
 
 static gboolean
@@ -83,6 +84,10 @@ plugin_init (GstPlugin * plugin)
     return FALSE;
   }
 #endif
+  if (!gst_tracer_register (plugin, "rangetime",
+          gst_range_time_tracer_get_type ())) {
+    return FALSE;
+  }
 
   return TRUE;
 }

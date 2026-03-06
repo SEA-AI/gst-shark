@@ -172,7 +172,38 @@ function plot_tracer(tracer,savefig,format,legend_location)
             plot_legend(tracer.proctime.element_name_list,'Proctime plot legend',savefig,'proctime_legend',format)
         end
     end
-    
+
+    # Plot Range time (from-element → to-element combined time)
+    if (1 == isfield(tracer,'rangetime'))
+        timestamp_max = max(max(tracer.rangetime.timestamp_mat));
+        timestamp_min = min(min(tracer.rangetime.timestamp_mat));
+
+        figure('Name','Range time')
+        plot(tracer.rangetime.timestamp_mat',tracer.rangetime.time_mat','linewidth',LINEWIDTH)
+        title('Range time (segment elapsed)','fontsize',FONTSIZE)
+        xlabel('time (seconds)','fontsize',FONTSIZE)
+        ylabel('time (nanoseconds)','fontsize',FONTSIZE)
+        xlim([timestamp_min,timestamp_max])
+        if (0 == strcmp(legend_location,'extern'))
+            legend(str2latex(tracer.rangetime.element_name_list),'Location',legend_location)
+        end
+
+        if (TRUE == savefig)
+            disp('Save rangetime figure...')
+            switch format
+                case 'pdf'
+                    print tracer -dpdf -append
+                case 'png'
+                    print('rangetime','-dpng');
+                otherwise
+                    printf('octave: WARN: %s is not supported',format)
+            end
+        end
+        if (1 == strcmp(legend_location,'extern'))
+            plot_legend(tracer.rangetime.element_name_list,'Rangetime plot legend',savefig,'rangetime_legend',format)
+        end
+    end
+
     # Plot Scheduling
     if (1 == isfield(tracer,'scheduling'))
         # Find time value extrema

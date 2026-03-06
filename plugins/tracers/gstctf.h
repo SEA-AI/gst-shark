@@ -36,6 +36,7 @@ typedef enum
   BITRATE_EVENT_ID,
   BUFFER_EVENT_ID,
   DETECTION_COUNT_EVENT_ID,
+  RANGETIME_EVENT_ID,
 } event_id;
 
 gchar *get_ctf_path_name (void);

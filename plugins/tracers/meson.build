@@ -63,6 +63,7 @@ libgst_shark_tracers_src_files = [
   'gstbitrate.c',
   'gstbuffer.c',
   'gstdetectioncount.c',
+  'gstrangetime.c'
 ]
 
 gst_shark_tracers_plugins = both_libraries('gstsharktracers',
