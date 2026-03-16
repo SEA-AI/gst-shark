@@ -20,13 +20,13 @@
 
 /**
  * SECTION:gstdetectioncount
- * @short_description: Count TrackerObject detections per buffer.
+ * @short_description: Count DetectorObject and TrackerObject detections per buffer.
  *
- * Logs the number of confirmed TrackerObject detections found in the
- * NvDsBatchMeta of every GstBuffer that traverses a pad. The count
- * accumulates across all camera streams (pad_index / source_id) present in
- * the batch so that the value reflects the total number of tracked targets
- * visible to the system at the time the buffer was produced.
+ * Logs the number of DetectorObject and TrackerObject detections found in the
+ * NvDsBatchMeta of every GstBuffer that traverses a pad. Both counts
+ * accumulate across all camera streams (pad_index / source_id) present in
+ * the batch so that the values reflect the total number of detected and
+ * tracked targets visible to the system at the time the buffer was produced.
  *
  * Activate with:
  *   GST_TRACERS=detectioncount GST_DEBUG="GST_TRACER:7" gst-launch-1.0 ...
@@ -56,8 +56,10 @@ struct _GstDetectionCountTracer
   GstSharkTracer parent;
 
 #ifdef GST_NVDS_ENABLE
-  /* Cached NvDs meta type for TrackerObject user metadata.
+  /* Cached NvDs meta types for user metadata.
    * Resolved once on first use via nvds_get_user_meta_type(). */
+  NvDsMetaType detector_meta_type;
+  gboolean     detector_meta_type_resolved;
   NvDsMetaType tracker_meta_type;
   gboolean     tracker_meta_type_resolved;
 
@@ -94,21 +96,28 @@ static const gchar detection_count_metadata_event[] =
     "        integer { size = 64; align = 8; signed = 0; encoding = none;"
     " base = 10; } pts;\n"
     "        integer { size = 32; align = 8; signed = 0; encoding = none;"
-    " base = 10; } count;\n"
+    " base = 10; } detector_count;\n"
+    "        integer { size = 32; align = 8; signed = 0; encoding = none;"
+    " base = 10; } tracker_count;\n"
     "    };\n"
     "};\n\n";
 
 /* ---- Helper: count TrackerObjects in a buffer ---------------------------- */
 
 #ifdef GST_NVDS_ENABLE
-/**
- * get_tracker_meta_type:
- * @self: the tracer instance
- *
- * Returns the NvDsMetaType for TrackerObject user metadata, resolving and
- * caching it on the first call (nvds_get_user_meta_type is idempotent but
- * not free — caching avoids repeated string-hash lookups).
- */
+static NvDsMetaType
+get_detector_meta_type (GstDetectionCountTracer * self)
+{
+  if (!self->detector_meta_type_resolved) {
+    self->detector_meta_type =
+        nvds_get_user_meta_type ((gchar *) "NVDS_OBJ_DETECTOR_META");
+    self->detector_meta_type_resolved = TRUE;
+    GST_LOG_OBJECT (self, "Resolved NVDS_OBJ_DETECTOR_META type: %d",
+        self->detector_meta_type);
+  }
+  return self->detector_meta_type;
+}
+
 static NvDsMetaType
 get_tracker_meta_type (GstDetectionCountTracer * self)
 {
@@ -124,36 +133,39 @@ get_tracker_meta_type (GstDetectionCountTracer * self)
 #endif /* GST_NVDS_ENABLE */
 
 /**
- * count_tracker_objects:
+ * count_detection_objects:
  * @self: the tracer instance
  * @buffer: the GstBuffer to inspect
+ * @detector_count: (out): number of NVDS_OBJ_DETECTOR_META entries found
+ * @tracker_count: (out): number of NVDS_OBJ_TRACKER_META entries found
  *
  * Iterates the NvDsBatchMeta attached to @buffer and counts every
- * NvDsObjectMeta that carries a NvDsUserMeta of type NVDS_OBJ_TRACKER_META.
- * This is the exact type written by write_tracker_meta() in tracker.c, so
- * only confirmed TrackerObject entries are counted.
- *
- * Returns: total number of TrackerObjects found across all sources / cameras
- *          in the batch; 0 if there is no NvDsBatchMeta.
+ * NvDsObjectMeta that carries a NvDsUserMeta of type NVDS_OBJ_DETECTOR_META
+ * or NVDS_OBJ_TRACKER_META independently.
  */
-static guint
-count_tracker_objects (GstDetectionCountTracer * self, GstBuffer * buffer)
+static void
+count_detection_objects (GstDetectionCountTracer * self, GstBuffer * buffer,
+    guint * detector_count, guint * tracker_count)
 {
+  *detector_count = 0;
+  *tracker_count  = 0;
+
 #ifdef GST_NVDS_ENABLE
   NvDsBatchMeta      *batch_meta;
   NvDsFrameMetaList  *l_frame;
   NvDsObjectMetaList *l_obj;
   NvDsUserMetaList   *l_user;
-  NvDsMetaType        tracker_type;
-  guint               count = 0;
+  NvDsMetaType        det_type;
+  NvDsMetaType        trk_type;
 
   batch_meta = gst_buffer_get_nvds_batch_meta (buffer);
   if (batch_meta == NULL) {
     GST_LOG_OBJECT (self, "No NvDsBatchMeta on buffer — skipping");
-    return 0;
+    return;
   }
 
-  tracker_type = get_tracker_meta_type (self);
+  det_type = get_detector_meta_type (self);
+  trk_type = get_tracker_meta_type (self);
 
   for (l_frame = batch_meta->frame_meta_list;
        l_frame != NULL;
@@ -172,20 +184,15 @@ count_tracker_objects (GstDetectionCountTracer * self, GstBuffer * buffer)
            l_user = l_user->next) {
 
         NvDsUserMeta *user_meta = (NvDsUserMeta *) (l_user->data);
-        if (user_meta->base_meta.meta_type == tracker_type) {
-          count++;
-          /* A given NvDsObjectMeta has at most one TrackerObject user meta,
-           * so we can break out of the inner loop early. */
-          break;
-        }
+        if (user_meta->base_meta.meta_type == det_type)
+          (*detector_count)++;
+        else if (user_meta->base_meta.meta_type == trk_type)
+          (*tracker_count)++;
       }
     }
   }
-
-  return count;
 #else
   GST_LOG_OBJECT (self, "NvDs not available — detectioncount always 0");
-  return 0;
 #endif /* GST_NVDS_ENABLE */
 }
 
@@ -197,7 +204,8 @@ pad_push_buffer_pre (GstDetectionCountTracer * self, GstClockTime ts,
 {
   gchar      *pad_name;
   GstClockTime pts;
-  guint       count = 0;
+  guint       det_count = 0;
+  guint       trk_count = 0;
 
 #ifdef GST_NVDS_ENABLE
   /* When infer-only mode is active, skip buffers that did not go through
@@ -216,14 +224,16 @@ pad_push_buffer_pre (GstDetectionCountTracer * self, GstClockTime ts,
   pad_name = g_strdup_printf ("%s_%s", GST_DEBUG_PAD_NAME (pad));
   pts      = GST_BUFFER_PTS (buffer);
 
-  count = count_tracker_objects (self, buffer);
+  count_detection_objects (self, buffer, &det_count, &trk_count);
 
-  GST_TRACE_OBJECT (self, "pad=%s pts=%" GST_TIME_FORMAT " detections=%u",
-      pad_name, GST_TIME_ARGS (pts), count);
+  GST_TRACE_OBJECT (self, "pad=%s pts=%" GST_TIME_FORMAT
+      " detector=%u tracker=%u",
+      pad_name, GST_TIME_ARGS (pts), det_count, trk_count);
 
-  gst_tracer_record_log (tr_detection_count, pad_name, pts, count);
+  gst_tracer_record_log (tr_detection_count, pad_name, pts,
+      det_count, trk_count);
   do_print_detection_count_event (DETECTION_COUNT_EVENT_ID, pad_name, pts,
-      count);
+      det_count, trk_count);
 
   g_free (pad_name);
 }
@@ -271,11 +281,21 @@ gst_detection_count_tracer_class_init (GstDetectionCountTracerClass * klass)
           "min", G_TYPE_UINT64, G_GUINT64_CONSTANT (0),
           "max", G_TYPE_UINT64, G_MAXUINT64,
           NULL),
-      "count", GST_TYPE_STRUCTURE,
+      "detector-count", GST_TYPE_STRUCTURE,
       gst_structure_new ("value",
           "type", G_TYPE_GTYPE, G_TYPE_UINT,
           "description", G_TYPE_STRING,
-          "Total number of TrackerObject detections in the buffer batch",
+          "Number of DetectorObject entries in the buffer batch",
+          "flags", GST_TYPE_TRACER_VALUE_FLAGS,
+          GST_TRACER_VALUE_FLAGS_AGGREGATED,
+          "min", G_TYPE_UINT, 0,
+          "max", G_TYPE_UINT, G_MAXUINT,
+          NULL),
+      "tracker-count", GST_TYPE_STRUCTURE,
+      gst_structure_new ("value",
+          "type", G_TYPE_GTYPE, G_TYPE_UINT,
+          "description", G_TYPE_STRING,
+          "Number of TrackerObject entries in the buffer batch",
           "flags", GST_TYPE_TRACER_VALUE_FLAGS,
           GST_TRACER_VALUE_FLAGS_AGGREGATED,
           "min", G_TYPE_UINT, 0,
@@ -290,9 +310,11 @@ gst_detection_count_tracer_init (GstDetectionCountTracer * self)
   GstSharkTracer *stracer = GST_SHARK_TRACER (self);
 
 #ifdef GST_NVDS_ENABLE
-  self->tracker_meta_type          = 0;
-  self->tracker_meta_type_resolved = FALSE;
-  self->infer_only                 = FALSE;
+  self->detector_meta_type          = 0;
+  self->detector_meta_type_resolved = FALSE;
+  self->tracker_meta_type           = 0;
+  self->tracker_meta_type_resolved  = FALSE;
+  self->infer_only                  = FALSE;
 #endif
 
   gst_shark_tracer_register_hook (stracer, "pad-push-pre",

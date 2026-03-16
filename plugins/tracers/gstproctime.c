@@ -91,7 +91,7 @@ do_push_buffer_pre (GstTracer * self, guint64 ts, GstPad * pad,
   gchar *time_string;
   gboolean should_log;
   gboolean should_calculate;
-  gboolean record_start = TRUE;
+  gboolean log_output = TRUE;
 
   proc_time_tracer = GST_PROC_TIME_TRACER (self);
   shark_tracer = GST_SHARK_TRACER (proc_time_tracer);
@@ -106,23 +106,25 @@ do_push_buffer_pre (GstTracer * self, guint64 ts, GstPad * pad,
   should_calculate = gst_shark_tracer_element_is_filtered (shark_tracer, name);
 
 #ifdef GST_NVDS_ENABLE
-  /* When infer-only mode is active, only record start time and log elapsed
-   * time for buffers on which inference was actually performed. */
+  /* When infer-only mode is active, log elapsed time only for buffers on
+   * which inference was actually performed (bInferDone on the output buffer).
+   * The start time is always recorded so that elements which set bInferDone
+   * themselves (e.g. nvinfer) are timed correctly. */
   if (proc_time_tracer->infer_only) {
     NvDsBatchMeta *batch_meta = gst_buffer_get_nvds_batch_meta (buffer);
     if (batch_meta && batch_meta->frame_meta_list) {
       NvDsFrameMeta *frame_meta =
           (NvDsFrameMeta *) batch_meta->frame_meta_list->data;
-      record_start = (gboolean) frame_meta->bInferDone;
+      log_output = (gboolean) frame_meta->bInferDone;
     } else {
-      record_start = FALSE;
+      log_output = FALSE;
     }
   }
 #endif /* GST_NVDS_ENABLE */
 
   should_log =
       gst_proctime_proc_time (proc_time, &time, pad_peer, pad, ts,
-      should_calculate, record_start);
+      should_calculate, TRUE, log_output);
 
   if (should_log) {
     time_string = g_strdup_printf ("%" GST_TIME_FORMAT, GST_TIME_ARGS (time));

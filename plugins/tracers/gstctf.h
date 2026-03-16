@@ -57,7 +57,7 @@ void do_print_buffer_event (event_id id, const gchar * pad, GstClockTime pts,
     guint64 offset_end, guint64 size, GstBufferFlags flags,
     guint32 refcount);
 void do_print_detection_count_event (event_id id, const gchar * pad,
-    GstClockTime pts, guint32 count);
+    GstClockTime pts, guint32 detector_count, guint32 tracker_count);
 void do_print_ctf_init (event_id id);
 G_END_DECLS
 #endif /*__GST_CTF_H__*/
