@@ -40,7 +40,12 @@
   if (modal) {
     function closeModal() {
       modal.style.display = 'none';
-      Plotly.purge('modal-plot');
+      modal.classList.remove('modal-wide');
+      var container = document.getElementById('modal-charts');
+      container.querySelectorAll('div[id^="modal-chart-"]').forEach(function(d) {
+        Plotly.purge(d);
+      });
+      container.innerHTML = '';
     }
     modal.addEventListener('click', function(e) {
       if (e.target === modal) closeModal();
@@ -55,19 +60,42 @@
     var data = window.PLOT_DATA && window.PLOT_DATA[key];
     if (!data) return;
     document.getElementById('modal-title').textContent = data.t;
+
+    // Normalise to array of {y, s} chart descriptors
+    var charts = data.charts || [{y: data.y, s: data.s}];
+    var isMulti = charts.length > 1;
+    var last = charts.length - 1;
+    var container = document.getElementById('modal-charts');
+    container.innerHTML = '';
+
+    // Pre-create placeholder divs so the flex layout is established
+    charts.forEach(function(_, idx) {
+      var div = document.createElement('div');
+      div.id = 'modal-chart-' + idx;
+      div.style.cssText = 'width:100%;flex:1;min-height:0';
+      container.appendChild(div);
+    });
+
+    // Show modal first so the browser lays out the container,
+    // then render Plotly charts with the real dimensions
     modal.style.display = 'flex';
-    var layout = {
-      margin: {l:60, r:20, t:10, b:45},
-      xaxis: {title: 'Time (s)', type: 'linear',
-              rangeslider: {visible: true}},
-      yaxis: {title: data.y},
-      legend: {orientation: 'h', y: -0.12},
-      hovermode: 'x unified',
-      hoverlabel: HOVER_STYLE,
-      paper_bgcolor: 'transparent', plot_bgcolor: '#fff'
-    };
-    Plotly.newPlot('modal-plot', buildTraces(data.s), layout,
-      {responsive: true, displaylogo: false,
-       modeBarButtonsToRemove: ['lasso2d','select2d']});
+    requestAnimationFrame(function() {
+      charts.forEach(function(chart, idx) {
+        var div = document.getElementById('modal-chart-' + idx);
+        var layout = {
+          margin: {l:60, r:20, t:8, b: idx === last ? 45 : 25},
+          xaxis: {title: idx === last ? 'Time (s)' : '',
+                  type: 'linear', rangeslider: {visible: !isMulti && idx === last}},
+          yaxis: {title: chart.y},
+          legend: {orientation: 'h', y: -0.15},
+          hovermode: 'x unified',
+          hoverlabel: HOVER_STYLE,
+          paper_bgcolor: 'transparent', plot_bgcolor: '#fff'
+        };
+        Plotly.newPlot(div, buildTraces(chart.s), layout,
+          {responsive: true, displaylogo: false,
+           modeBarButtonsToRemove: ['lasso2d','select2d']});
+      });
+    });
   };
 })();

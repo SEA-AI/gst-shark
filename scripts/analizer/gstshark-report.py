@@ -23,7 +23,7 @@ from collections import defaultdict
 
 # Allow importing sibling module regardless of how the script is invoked
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from report_html import build_report
+from report_html import build_report, build_summary
 
 
 # ---------------------------------------------------------------------------
@@ -231,6 +231,13 @@ RE_FRAMERATE = re.compile(
     r"\bfps\s*=\s*(?P<fps>\d+)"
 )
 
+RE_QUEUELEVEL = re.compile(
+    r"\[(?P<ts>[^\]]+)\].*?\bqueuelevel\b.*?"
+    r'queue\s*=\s*"(?P<queue>[^"]+)".*?'
+    r'size_buffers\s*=\s*(?P<size_buffers>\d+).*?'
+    r'max_size_buffers\s*=\s*(?P<max_buffers>\d+)'
+)
+
 
 def _parse_ts(ts_str):
     """Parse babeltrace timestamp 'HH:MM:SS.NNNNNNNNN' to seconds (float)."""
@@ -251,6 +258,8 @@ def parse_log(text, filter_pattern=None):
     rangetime = defaultdict(list)
     detection = defaultdict(lambda: {"det": [], "trk": []})
     framerate = defaultdict(list)
+    ql_buffers = defaultdict(list)   # queue -> [(ts, size_buffers)]
+    ql_capacity: dict[str, int] = {}  # queue -> max_size_buffers
 
     for line in text.splitlines():
         if filter_pattern and not filter_pattern.search(line):
@@ -280,12 +289,24 @@ def parse_log(text, filter_pattern=None):
         if m:
             ts = _parse_ts(m.group("ts"))
             framerate[m.group("pad")].append((ts, int(m.group("fps"))))
+            continue
+
+        m = RE_QUEUELEVEL.search(line)
+        if m:
+            ts = _parse_ts(m.group("ts"))
+            q = m.group("queue")
+            ql_buffers[q].append((ts, int(m.group("size_buffers"))))
+            ql_capacity[q] = int(m.group("max_buffers"))
+
+    queuelevel = {q: {"size_buffers": ql_buffers[q], "capacity": ql_capacity.get(q, 0)}
+                  for q in ql_buffers}
 
     return {
         "proctime": dict(proctime),
         "rangetime": dict(rangetime),
         "detection": dict(detection),
         "framerate": dict(framerate),
+        "queuelevel": queuelevel,
     }
 
 
@@ -356,7 +377,9 @@ def main():
                               "gstshark_report.html")
     with open(output, "w") as fh:
         fh.write(report + "\n")
-    print(f"Report written to {output}")
+
+    summary = build_summary(data, pipeline_order=pipeline_order, queue_names=queue_names)
+    print(summary)
 
 
 if __name__ == "__main__":

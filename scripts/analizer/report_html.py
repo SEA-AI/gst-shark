@@ -185,17 +185,21 @@ def _section_proctime(pt, pipeline_order=None, queue_names=None):
                 segments.append(current)
 
         # Sort by pipeline position when available; unknowns go at end sorted by mean
+        # Exclude queue elements from the per-element table when they are known
+        _queues_set = queue_names or set()
         if pipeline_order:
             pos = {name: i for i, name in enumerate(pipeline_order)}
             ranked = sorted(
-                pt.items(),
+                ((k, v) for k, v in pt.items() if k not in _queues_set),
                 key=lambda kv: (pos.get(kv[0], len(pipeline_order)),
                                 -(sum(_vals(kv[1])) / len(kv[1]))),
             )
         else:
-            ranked = sorted(pt.items(),
-                            key=lambda kv: sum(_vals(kv[1])) / len(kv[1]),
-                            reverse=True)
+            ranked = sorted(
+                ((k, v) for k, v in pt.items() if k not in _queues_set),
+                key=lambda kv: sum(_vals(kv[1])) / len(kv[1]),
+                reverse=True,
+            )
 
         h.append('<table><thead><tr>'
                  '<th>Element</th><th class="num">Mean (ms)</th><th class="num">Std (ms)</th>'
@@ -309,57 +313,163 @@ def _section_rangetime(rt):
     return h
 
 
-def _section_insights(det, fr, pt, rt):
+
+def _section_queues(pt, ql, queue_order):
+    """Queue analysis: proctime + fill-level stats and time-series plots."""
+    # Only include queues that actually have data
+    active = [q for q in queue_order if q in pt or q in ql]
+    if not active:
+        return []
+
     h = []
-    h.append('<h2>4. Insights</h2>')
+    h.append('<details class="collapsible-section">')
+    h.append('<summary><h2>Queue Analysis</h2></summary>')
     h.append('<div class="card">')
-    insights = []
 
-    if pt:
-        for elem, ts_vals in pt.items():
-            st = _stats(_vals(ts_vals))
-            cv = (st["std"] / st["mean"] * 100) if st["mean"] else 0
-            if cv > 50:
-                insights.append(
-                    f'<span class="badge badge-warn">WARN</span> '
-                    f'<strong>{_esc(elem)}</strong> proctime has high variability '
-                    f'(CV={cv:.0f}%). Possible jitter source.')
+    # --- Summary table ---
+    h.append('<table><thead><tr>'
+             '<th>Queue</th>'
+             '<th class="num">Proctime Mean (ms)</th><th class="num">Proctime Std (ms)</th>'
+             '<th class="num">Fill Mean (buf)</th><th class="num">Fill Max (buf)</th>'
+             '<th class="num">Capacity (buf)</th><th class="num">Mean Fill %</th>'
+             '</tr></thead><tbody>')
+    for q in active:
+        if q in pt:
+            st = _stats(_vals(pt[q]))
+            pt_mean = _fmt_ms(st["mean"])
+            pt_std  = _fmt_ms(st["std"])
+        else:
+            pt_mean = pt_std = '&mdash;'
 
-    if rt:
-        for label, ts_vals in rt.items():
-            st = _stats(_vals(ts_vals))
-            cv = (st["std"] / st["mean"] * 100) if st["mean"] else 0
-            if cv > 50:
-                insights.append(
-                    f'<span class="badge badge-warn">WARN</span> '
-                    f'Rangetime <strong>{_esc(label)}</strong> has high variability '
-                    f'(CV={cv:.0f}%).')
+        if q in ql:
+            fill_vals = _vals(ql[q]["size_buffers"])
+            cap = ql[q]["capacity"]
+            fill_mean_v = sum(fill_vals) / len(fill_vals) if fill_vals else 0
+            fill_max_v  = max(fill_vals) if fill_vals else 0
+            fill_mean = f'{fill_mean_v:.1f}'
+            fill_max  = str(fill_max_v)
+            capacity  = str(cap)
+            fill_pct  = f'{fill_mean_v / cap * 100:.1f}' if cap else '&mdash;'
+        else:
+            fill_mean = fill_max = capacity = fill_pct = '&mdash;'
 
-    if det and fr:
-        avg_det = sum(
-            sum(_vals(d["det"])) / len(d["det"]) for d in det.values()
-        ) / len(det)
-        avg_fps = sum(sum(_vals(v)) / len(v) for v in fr.values()) / len(fr)
-        if avg_fps > 0:
-            det_per_frame = avg_det / avg_fps
-            insights.append(
-                f'<span class="badge badge-info">INFO</span> '
-                f'Average detections per frame: {det_per_frame:.1f}')
+        slug = _slug("ql_" + q)
+        h.append(f'<tr class="clickable" onclick="showPlot(\'{slug}\')">'
+                 f'<td>{_esc(q)}</td>'
+                 f'<td class="num">{pt_mean}</td>'
+                 f'<td class="num">{pt_std}</td>'
+                 f'<td class="num">{fill_mean}</td>'
+                 f'<td class="num">{fill_max}</td>'
+                 f'<td class="num">{capacity}</td>'
+                 f'<td class="num">{fill_pct}</td>'
+                 f'</tr>')
+    h.append('</tbody></table>')
 
-    if insights:
-        h.append('<ul>')
-        for item in insights:
-            h.append(f'<li style="margin:.4rem 0">{item}</li>')
-        h.append('</ul>')
-    else:
-        h.append('<p class="muted">No anomalies detected.</p>')
     h.append('</div>')
+    h.append('</details>')
     return h
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+def build_summary(data, pipeline_order=None, queue_names=None):
+    """Return a markdown string summarising proctime data for a PR comment."""
+    pt = data["proctime"]
+    if not pt:
+        return "_No proctime data found._\n"
+
+    all_queue_names = (queue_names or set()) | set(data.get("queuelevel", {}).keys()) | {
+        e for e in pt if e.lower().startswith('queue')
+    }
+
+    # Determine ordered, non-queue elements
+    _queues_set = all_queue_names
+    if pipeline_order:
+        pos = {name: i for i, name in enumerate(pipeline_order)}
+        ranked = sorted(
+            ((k, v) for k, v in pt.items() if k not in _queues_set),
+            key=lambda kv: (pos.get(kv[0], len(pipeline_order)),
+                            -(sum(_vals(kv[1])) / len(kv[1]))),
+        )
+    else:
+        ranked = sorted(
+            ((k, v) for k, v in pt.items() if k not in _queues_set),
+            key=lambda kv: sum(_vals(kv[1])) / len(kv[1]),
+            reverse=True,
+        )
+
+    lines = []
+    lines.append("## Processing Time Summary\n")
+
+    # Per-element table
+    lines.append("| Element | Mean (ms) | Std (ms) | CV (%) | Samples |")
+    lines.append("|---------|----------:|---------:|-------:|--------:|")
+    for elem, ts_vals in ranked:
+        st = _stats(_vals(ts_vals))
+        cv = (st["std"] / st["mean"] * 100) if st["mean"] else 0
+        lines.append(f"| {elem} | {_fmt_ms(st['mean'])} | {_fmt_ms(st['std'])} "
+                     f"| {cv:.1f} | {st['count']} |")
+
+    # Segments (only when pipeline order is known)
+    if pipeline_order:
+        _queues = queue_names or set()
+        segments = []
+        current = []
+        for name in pipeline_order:
+            if name in _queues:
+                if current:
+                    segments.append(current)
+                current = []
+            else:
+                if name in pt:
+                    current.append(name)
+        if current:
+            segments.append(current)
+
+        if segments:
+            seg_sums = [sum(sum(_vals(pt[e])) / len(pt[e]) for e in seg)
+                        for seg in segments]
+            total_mean = sum(seg_sums)
+            bn_idx = seg_sums.index(max(seg_sums))
+            bn_sum = seg_sums[bn_idx]
+            bn_pct = (bn_sum / total_mean * 100) if total_mean else 0
+            bn_seg = segments[bn_idx]
+            if len(bn_seg) <= 2:
+                bn_label = ' -> '.join(bn_seg)
+            else:
+                bn_label = f'{bn_seg[0]} -> ... -> {bn_seg[-1]}'
+
+            lines.append("\n### Segments (between queues)\n")
+            lines.append("| # | Segment | Elements | Sum of Means (ms) |")
+            lines.append("|---|---------|--------:|------------------:|")
+            for i, (seg, seg_sum) in enumerate(zip(segments, seg_sums), 1):
+                marker = " **" if i - 1 == bn_idx else ""
+                marker_end = "**" if i - 1 == bn_idx else ""
+                if len(seg) <= 2:
+                    label = ' -> '.join(seg)
+                else:
+                    label = f'{seg[0]} -> ... -> {seg[-1]}'
+                lines.append(f"| {marker}{i}{marker_end} | {marker}{label}{marker_end} "
+                              f"| {len(seg)} | {_fmt_ms(seg_sum)} |")
+
+            lines.append(f"\n**Total (sum of means):** {_fmt_ms(total_mean)} ms  ")
+            lines.append(f"**Bottleneck segment:** {bn_label} "
+                         f"({_fmt_ms(bn_sum)} ms, {bn_pct:.1f}%)")
+    else:
+        # No pipeline order — element-level fallback
+        total_mean = sum(sum(_vals(v)) / len(v) for _, v in ranked)
+        if ranked:
+            bottleneck = max(ranked, key=lambda kv: sum(_vals(kv[1])) / len(kv[1]))
+            bn_mean = sum(_vals(bottleneck[1])) / len(bottleneck[1])
+            bn_pct = (bn_mean / total_mean * 100) if total_mean else 0
+            lines.append(f"\n**Total (sum of means):** {_fmt_ms(total_mean)} ms  ")
+            lines.append(f"**Bottleneck:** {bottleneck[0]} "
+                         f"({_fmt_ms(bn_mean)} ms, {bn_pct:.1f}%)")
+
+    return "\n".join(lines) + "\n"
+
 
 def build_report(data, pipeline_svg=None, pipeline_order=None, queue_names=None):
     """Build a complete HTML report from parsed tracer data.
@@ -371,6 +481,22 @@ def build_report(data, pipeline_svg=None, pipeline_order=None, queue_names=None)
     fr = data["framerate"]
     pt = data["proctime"]
     rt = data["rangetime"]
+    ql = data.get("queuelevel", {})
+
+    # Full set of known queue element names (used to exclude from proctime table)
+    all_queue_names = (queue_names or set()) | set(ql.keys()) | {
+        e for e in pt if e.lower().startswith('queue')
+    }
+
+    # Ordered list of ALL queues for the queue analysis section:
+    # DOT path-queues first (pipeline order), then every other queue sorted.
+    if pipeline_order and queue_names:
+        path_queues = [n for n in pipeline_order if n in queue_names]
+    else:
+        path_queues = []
+    path_set = set(path_queues)
+    other_queues = sorted(q for q in all_queue_names if q not in path_set)
+    queue_order = path_queues + other_queues
 
     # Build dynamic section content
     sections = []
@@ -378,9 +504,10 @@ def build_report(data, pipeline_svg=None, pipeline_order=None, queue_names=None)
         sections.extend(_section_pipeline(pipeline_svg))
     sections.extend(_section_detection(det))
     sections.extend(_section_framerate(fr))
-    sections.extend(_section_proctime(pt, pipeline_order=pipeline_order, queue_names=queue_names))
+    sections.extend(_section_proctime(pt, pipeline_order=pipeline_order,
+                                      queue_names=all_queue_names))
+    sections.extend(_section_queues(pt, ql, queue_order))
     sections.extend(_section_rangetime(rt))
-    sections.extend(_section_insights(det, fr, pt, rt))
     sections_html = "\n".join(sections)
 
     # Load templates
@@ -405,6 +532,25 @@ def build_report(data, pipeline_svg=None, pipeline_order=None, queue_names=None)
             pts = pts[::len(pts) // MAX_PTS]
         plot_data[slug] = {"t": label + " \u2014 rangetime",
                            "y": "ms", "s": [{"n": label, "d": pts}]}
+    for q in queue_order:
+        slug = _slug("ql_" + q)
+        charts = []
+        if q in ql:
+            pts_fill = [[t, v] for t, v in ql[q]["size_buffers"]]
+            if len(pts_fill) > MAX_PTS:
+                pts_fill = pts_fill[::len(pts_fill) // MAX_PTS]
+            charts.append({"y": "buffers", "s": [{"n": "fill level", "d": pts_fill}]})
+        if q in pt:
+            pts_time = [[t, v / 1e6] for t, v in pt[q]]
+            if len(pts_time) > MAX_PTS:
+                pts_time = pts_time[::len(pts_time) // MAX_PTS]
+            charts.append({"y": "ms", "s": [{"n": "proctime", "d": pts_time}]})
+        if charts:
+            title = q + " \u2014 queue analysis"
+            if len(charts) == 1:
+                plot_data[slug] = {"t": title, "y": charts[0]["y"], "s": charts[0]["s"]}
+            else:
+                plot_data[slug] = {"t": title, "charts": charts}
     plot_data_script = ('<script>var PLOT_DATA='
                         + json.dumps(plot_data, separators=(',', ':'))
                         + ';</script>')

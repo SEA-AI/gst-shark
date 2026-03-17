@@ -80,6 +80,13 @@
   .modal-close:hover { color:var(--text); }
   .pipeline-diagram { overflow-x: auto; }
   .pipeline-diagram svg { height: auto; max-width: none; display: block; }
+  .collapsible-section > summary { list-style: none; cursor: pointer; }
+  .collapsible-section > summary::-webkit-details-marker { display: none; }
+  .collapsible-section > summary h2 { display: inline-flex; align-items: center; gap: .4rem; }
+  .collapsible-section > summary h2::before {
+    content: '▶'; font-size: .75rem; transition: transform .15s;
+  }
+  .collapsible-section[open] > summary h2::before { transform: rotate(90deg); }
 </style>
 </head>
 <body>

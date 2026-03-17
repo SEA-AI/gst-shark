@@ -64,6 +64,23 @@ G_DEFINE_TYPE_WITH_CODE (GstProcTimeTracer, gst_proc_time_tracer,
 
 static void gst_proc_time_tracer_constructed (GObject *object);
 
+#ifdef GST_NVDS_ENABLE
+static gboolean
+is_queue_element (GstElement * element)
+{
+  static GstElementFactory *qfactory = NULL;
+  GstElementFactory *efactory;
+
+  g_return_val_if_fail (element, FALSE);
+
+  if (NULL == qfactory)
+    qfactory = gst_element_factory_find ("queue");
+
+  efactory = gst_element_get_factory (element);
+  return efactory == qfactory;
+}
+#endif /* GST_NVDS_ENABLE */
+
 static GstTracerRecord *tr_proc_time;
 
 static const gchar proc_time_metadata_event[] = "event {\n\
@@ -108,16 +125,21 @@ do_push_buffer_pre (GstTracer * self, guint64 ts, GstPad * pad,
 #ifdef GST_NVDS_ENABLE
   /* When infer-only mode is active, log elapsed time only for buffers on
    * which inference was actually performed (bInferDone on the output buffer).
-   * The start time is always recorded so that elements which set bInferDone
-   * themselves (e.g. nvinfer) are timed correctly. */
+   * Queue elements are exempt: they are always logged so that fill-level
+   * analysis remains accurate regardless of inference cadence. */
   if (proc_time_tracer->infer_only) {
-    NvDsBatchMeta *batch_meta = gst_buffer_get_nvds_batch_meta (buffer);
-    if (batch_meta && batch_meta->frame_meta_list) {
-      NvDsFrameMeta *frame_meta =
-          (NvDsFrameMeta *) batch_meta->frame_meta_list->data;
-      log_output = (gboolean) frame_meta->bInferDone;
-    } else {
-      log_output = FALSE;
+    GstObject *parent = GST_OBJECT_PARENT (pad);
+    GstElement *element = (parent && GST_IS_ELEMENT (parent))
+        ? GST_ELEMENT (parent) : NULL;
+    if (!element || !is_queue_element (element)) {
+      NvDsBatchMeta *batch_meta = gst_buffer_get_nvds_batch_meta (buffer);
+      if (batch_meta && batch_meta->frame_meta_list) {
+        NvDsFrameMeta *frame_meta =
+            (NvDsFrameMeta *) batch_meta->frame_meta_list->data;
+        log_output = (gboolean) frame_meta->bInferDone;
+      } else {
+        log_output = FALSE;
+      }
     }
   }
 #endif /* GST_NVDS_ENABLE */
