@@ -24,12 +24,12 @@
  * A tracing module that take proctime() snapshots and logs them.
  */
 
-#include "gstproctimecompute.h"
-#include "gstproctime.h"
-#include "gstctf.h"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
+#include "gstproctimecompute.h"
+#include "gstproctime.h"
+#include "gstctf.h"
 #ifdef GST_NVDS_ENABLE
 #include <gstnvdsmeta.h>
 #endif
@@ -228,14 +228,14 @@ gst_proc_time_tracer_init (GstProcTimeTracer * self)
 static void
 gst_proc_time_tracer_constructed (GObject *object)
 {
-  GstProcTimeTracer *self = GST_PROC_TIME_TRACER (object);
-  GstSharkTracer *shark_tracer = GST_SHARK_TRACER (object);
   gchar *metadata_event = NULL;
 
   /* chain up so parent constructed runs first (calls gst_ctf_init) */
   G_OBJECT_CLASS (gst_proc_time_tracer_parent_class)->constructed (object);
 
 #ifdef GST_NVDS_ENABLE
+  GstProcTimeTracer *self = GST_PROC_TIME_TRACER (object);
+  GstSharkTracer *shark_tracer = GST_SHARK_TRACER (object);
   /* Read the optional "infer-only" param.
    * Usage: GST_TRACERS="proctime(infer-only=true)"
    * When enabled, only buffers that have bInferDone set on their

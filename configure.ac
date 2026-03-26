@@ -283,6 +283,37 @@ AC_ARG_ENABLE(check,
     esac
 ])
 
+dnl NVIDIA DeepStream support
+dnl Searches for gstnvdsmeta.h in the default DeepStream installation path.
+dnl Use --with-nvds-inc-dir / --with-nvds-lib-dir to override.
+NVDS_INC_DIR="/opt/nvidia/deepstream/deepstream/sources/includes"
+NVDS_LIB_DIR="/opt/nvidia/deepstream/deepstream/lib"
+
+AC_ARG_WITH([nvds-inc-dir],
+  AS_HELP_STRING([--with-nvds-inc-dir=DIR],
+    [path to NVIDIA DeepStream headers @<:@default: /opt/nvidia/deepstream/deepstream/sources/includes@:>@]),
+  [NVDS_INC_DIR="$withval"])
+
+AC_ARG_WITH([nvds-lib-dir],
+  AS_HELP_STRING([--with-nvds-lib-dir=DIR],
+    [path to NVIDIA DeepStream libraries @<:@default: /opt/nvidia/deepstream/deepstream/lib@:>@]),
+  [NVDS_LIB_DIR="$withval"])
+
+saved_CPPFLAGS="$CPPFLAGS"
+CPPFLAGS="$CPPFLAGS -I$NVDS_INC_DIR"
+AC_CHECK_HEADER([gstnvdsmeta.h],
+  [
+    AC_DEFINE(GST_NVDS_ENABLE, 1, [Define to enable NVIDIA DeepStream features])
+    NVDS_CFLAGS="-I$NVDS_INC_DIR"
+    NVDS_LIBS="-L$NVDS_LIB_DIR -lnvdsgst_meta -lnvds_meta"
+    AC_MSG_NOTICE([NVIDIA DeepStream found — NvDs-based features enabled])
+  ],
+  [AC_MSG_WARN([NVIDIA DeepStream not found — detectioncount/infer-only features disabled])])
+CPPFLAGS="$saved_CPPFLAGS"
+
+AC_SUBST(NVDS_CFLAGS)
+AC_SUBST(NVDS_LIBS)
+
 dnl checking the OS to enable reading of CPU usage
 case $host_os in
   linux*)

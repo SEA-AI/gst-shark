@@ -37,6 +37,9 @@
  * compatible with the standard proctime parser and Octave plots.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include "config.h"
+#endif
 #include "gstrangetime.h"
 #include "gstctf.h"
 #ifdef GST_NVDS_ENABLE

@@ -37,11 +37,11 @@
  *   Requires GST_NVDS_ENABLE; when NvDs is absent the flag is ignored.
  */
 
-#include "gstdetectioncount.h"
-#include "gstctf.h"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
+#include "gstdetectioncount.h"
+#include "gstctf.h"
 #ifdef GST_NVDS_ENABLE
 #include <gstnvdsmeta.h>
 #endif
@@ -330,18 +330,19 @@ gst_detection_count_tracer_init (GstDetectionCountTracer * self)
 static void
 gst_detection_count_tracer_constructed (GObject * object)
 {
-  GstDetectionCountTracer *self = GST_DETECTION_COUNT_TRACER (object);
-  GstSharkTracer *stracer = GST_SHARK_TRACER (object);
+  gchar *metadata_event;
 
   /* Chain up so the parent constructed runs first (calls gst_ctf_init). */
   G_OBJECT_CLASS (gst_detection_count_tracer_parent_class)->constructed (object);
 
-  gchar *metadata_event = g_strdup_printf (detection_count_metadata_event,
+  metadata_event = g_strdup_printf (detection_count_metadata_event,
       DETECTION_COUNT_EVENT_ID, 0);
   add_metadata_event_struct (metadata_event);
   g_free (metadata_event);
 
 #ifdef GST_NVDS_ENABLE
+  GstDetectionCountTracer *self = GST_DETECTION_COUNT_TRACER (object);
+  GstSharkTracer *stracer = GST_SHARK_TRACER (object);
   /* Read the optional "infer-only" param.
    * Usage: GST_TRACERS="detectioncount(infer-only=true)"
    * When enabled, buffers that did not trigger inference are silently
