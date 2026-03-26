@@ -300,7 +300,7 @@ AC_ARG_WITH([nvds-lib-dir],
   [NVDS_LIB_DIR="$withval"])
 
 saved_CPPFLAGS="$CPPFLAGS"
-CPPFLAGS="$CPPFLAGS -I$NVDS_INC_DIR"
+CPPFLAGS="$CPPFLAGS -I$NVDS_INC_DIR $GST_CFLAGS $GLIB_CFLAGS"
 AC_CHECK_HEADER([gstnvdsmeta.h],
   [
     AC_DEFINE(GST_NVDS_ENABLE, 1, [Define to enable NVIDIA DeepStream features])
