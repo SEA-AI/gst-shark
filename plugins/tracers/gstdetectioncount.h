@@ -20,12 +20,12 @@
 
 /**
  * SECTION:gstdetectioncount
- * @short_description: Count TrackerObject detections per buffer.
+ * @short_description: Count DetectorObject and TrackerObject detections per buffer.
  *
- * A tracing module that counts the number of TrackerObject entries (confirmed
- * tracked detections) present in the NvDsBatchMeta attached to each GstBuffer
- * as it traverses a pad. The total count across all camera streams (pad
- * indices) contained in the batch is logged once per buffer push.
+ * A tracing module that counts the number of DetectorObject and TrackerObject
+ * entries present in the NvDsBatchMeta attached to each GstBuffer as it
+ * traverses a pad. Both counts (across all camera streams / pad indices in
+ * the batch) are logged independently once per buffer push.
  *
  * Requires a build environment where NVIDIA DeepStream headers are available
  * (GST_NVDS_ENABLE must be defined by the build system).

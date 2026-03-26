@@ -1136,7 +1136,7 @@ do_print_buffer_event (event_id id, const gchar * pad, GstClockTime pts,
 
 void
 do_print_detection_count_event (event_id id, const gchar * pad,
-    GstClockTime pts, guint32 count)
+    GstClockTime pts, guint32 detector_count, guint32 tracker_count)
 {
   GError *error;
   guint8 *mem;
@@ -1144,7 +1144,7 @@ do_print_detection_count_event (event_id id, const gchar * pad,
   gsize event_size;
 
   event_size =
-      strlen (pad) + 1 + sizeof (guint64) + sizeof (guint32) + CTF_HEADER_SIZE;
+      strlen (pad) + 1 + sizeof (guint64) + sizeof (guint32) * 2 + CTF_HEADER_SIZE;
 
   if (event_exceeds_mem_size (event_size)) {
     return;
@@ -1158,7 +1158,8 @@ do_print_detection_count_event (event_id id, const gchar * pad,
   CTF_EVENT_WRITE_HEADER (id, event_mem);
   CTF_EVENT_WRITE_STRING (pad, event_mem);
   CTF_EVENT_WRITE_INT64 (pts, event_mem);
-  CTF_EVENT_WRITE_INT32 (count, event_mem);
+  CTF_EVENT_WRITE_INT32 (detector_count, event_mem);
+  CTF_EVENT_WRITE_INT32 (tracker_count, event_mem);
 
   if (FALSE == ctf_descriptor->file_output_disable) {
     event_mem -= event_size;

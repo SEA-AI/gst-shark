@@ -24,12 +24,12 @@
  * A tracing module that take proctime() snapshots and logs them.
  */
 
-#include "gstproctimecompute.h"
-#include "gstproctime.h"
-#include "gstctf.h"
 #ifdef HAVE_CONFIG_H
 #  include "config.h"
 #endif
+#include "gstproctimecompute.h"
+#include "gstproctime.h"
+#include "gstctf.h"
 #ifdef GST_NVDS_ENABLE
 #include <gstnvdsmeta.h>
 #endif
@@ -64,6 +64,23 @@ G_DEFINE_TYPE_WITH_CODE (GstProcTimeTracer, gst_proc_time_tracer,
 
 static void gst_proc_time_tracer_constructed (GObject *object);
 
+#ifdef GST_NVDS_ENABLE
+static gboolean
+is_queue_element (GstElement * element)
+{
+  static GstElementFactory *qfactory = NULL;
+  GstElementFactory *efactory;
+
+  g_return_val_if_fail (element, FALSE);
+
+  if (NULL == qfactory)
+    qfactory = gst_element_factory_find ("queue");
+
+  efactory = gst_element_get_factory (element);
+  return efactory == qfactory;
+}
+#endif /* GST_NVDS_ENABLE */
+
 static GstTracerRecord *tr_proc_time;
 
 static const gchar proc_time_metadata_event[] = "event {\n\
@@ -91,7 +108,7 @@ do_push_buffer_pre (GstTracer * self, guint64 ts, GstPad * pad,
   gchar *time_string;
   gboolean should_log;
   gboolean should_calculate;
-  gboolean record_start = TRUE;
+  gboolean log_output = TRUE;
 
   proc_time_tracer = GST_PROC_TIME_TRACER (self);
   shark_tracer = GST_SHARK_TRACER (proc_time_tracer);
@@ -106,23 +123,30 @@ do_push_buffer_pre (GstTracer * self, guint64 ts, GstPad * pad,
   should_calculate = gst_shark_tracer_element_is_filtered (shark_tracer, name);
 
 #ifdef GST_NVDS_ENABLE
-  /* When infer-only mode is active, only record start time and log elapsed
-   * time for buffers on which inference was actually performed. */
+  /* When infer-only mode is active, log elapsed time only for buffers on
+   * which inference was actually performed (bInferDone on the output buffer).
+   * Queue elements are exempt: they are always logged so that fill-level
+   * analysis remains accurate regardless of inference cadence. */
   if (proc_time_tracer->infer_only) {
-    NvDsBatchMeta *batch_meta = gst_buffer_get_nvds_batch_meta (buffer);
-    if (batch_meta && batch_meta->frame_meta_list) {
-      NvDsFrameMeta *frame_meta =
-          (NvDsFrameMeta *) batch_meta->frame_meta_list->data;
-      record_start = (gboolean) frame_meta->bInferDone;
-    } else {
-      record_start = FALSE;
+    GstObject *parent = GST_OBJECT_PARENT (pad);
+    GstElement *element = (parent && GST_IS_ELEMENT (parent))
+        ? GST_ELEMENT (parent) : NULL;
+    if (!element || !is_queue_element (element)) {
+      NvDsBatchMeta *batch_meta = gst_buffer_get_nvds_batch_meta (buffer);
+      if (batch_meta && batch_meta->frame_meta_list) {
+        NvDsFrameMeta *frame_meta =
+            (NvDsFrameMeta *) batch_meta->frame_meta_list->data;
+        log_output = (gboolean) frame_meta->bInferDone;
+      } else {
+        log_output = FALSE;
+      }
     }
   }
 #endif /* GST_NVDS_ENABLE */
 
   should_log =
       gst_proctime_proc_time (proc_time, &time, pad_peer, pad, ts,
-      should_calculate, record_start);
+      should_calculate, TRUE, log_output);
 
   if (should_log) {
     time_string = g_strdup_printf ("%" GST_TIME_FORMAT, GST_TIME_ARGS (time));
@@ -204,14 +228,14 @@ gst_proc_time_tracer_init (GstProcTimeTracer * self)
 static void
 gst_proc_time_tracer_constructed (GObject *object)
 {
-  GstProcTimeTracer *self = GST_PROC_TIME_TRACER (object);
-  GstSharkTracer *shark_tracer = GST_SHARK_TRACER (object);
   gchar *metadata_event = NULL;
 
   /* chain up so parent constructed runs first (calls gst_ctf_init) */
   G_OBJECT_CLASS (gst_proc_time_tracer_parent_class)->constructed (object);
 
 #ifdef GST_NVDS_ENABLE
+  GstProcTimeTracer *self = GST_PROC_TIME_TRACER (object);
+  GstSharkTracer *shark_tracer = GST_SHARK_TRACER (object);
   /* Read the optional "infer-only" param.
    * Usage: GST_TRACERS="proctime(infer-only=true)"
    * When enabled, only buffers that have bInferDone set on their

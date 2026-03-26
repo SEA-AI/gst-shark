@@ -382,36 +382,67 @@ function plot_tracer(tracer,savefig,format,legend_location)
         end
     end
 
-    # Plot Detection count
-    if (1 == isfield(tracer,'detectioncount'))
-        timestamp_max = max(max(tracer.detectioncount.timestamp_mat));
-        timestamp_min = min(min(tracer.detectioncount.timestamp_mat));
+    # Plot Detector count
+    if (1 == isfield(tracer,'detectioncount_detector'))
+        timestamp_max = max(max(tracer.detectioncount_detector.timestamp_mat));
+        timestamp_min = min(min(tracer.detectioncount_detector.timestamp_mat));
 
-        figure('Name','Detection count')
-        stairs(tracer.detectioncount.timestamp_mat', tracer.detectioncount.count_mat', 'linewidth', LINEWIDTH)
-        title('Detection count (TrackerObjects per buffer)','fontsize',FONTSIZE)
+        figure('Name','Detector count')
+        stairs(tracer.detectioncount_detector.timestamp_mat', tracer.detectioncount_detector.count_mat', 'linewidth', LINEWIDTH)
+        title('Detector count (DetectorObjects per buffer)','fontsize',FONTSIZE)
         xlabel('time (seconds)','fontsize',FONTSIZE)
         ylabel('Number of detections','fontsize',FONTSIZE)
         xlim([timestamp_min,timestamp_max])
-        ylim([0, max(1, max(max(tracer.detectioncount.count_mat))) + 1])
+        ylim([0, max(1, max(max(tracer.detectioncount_detector.count_mat))) + 1])
         if (0 == strcmp(legend_location,'extern'))
-            legend(str2latex(tracer.detectioncount.pad_name_list),'Location',legend_location)
+            legend(str2latex(tracer.detectioncount_detector.pad_name_list),'Location',legend_location)
         end
 
         if (TRUE == savefig)
-            disp('Save detectioncount figure...')
+            disp('Save detectioncount_detector figure...')
             switch format
                 case 'pdf'
                     print tracer -dpdf -append
                 case 'png'
-                    print('detectioncount','-dpng');
+                    print('detectioncount_detector','-dpng');
                 otherwise
                     printf('octave: WARN: %s is not supported',format)
             end
         end
-        # Create a new figure if the legend location is extern
         if (1 == strcmp(legend_location,'extern'))
-            plot_legend(tracer.detectioncount.pad_name_list,'Detection count legend',savefig,'detectioncount_legend',format)
+            plot_legend(tracer.detectioncount_detector.pad_name_list,'Detector count legend',savefig,'detectioncount_detector_legend',format)
+        end
+    end
+
+    # Plot Tracker count
+    if (1 == isfield(tracer,'detectioncount_tracker'))
+        timestamp_max = max(max(tracer.detectioncount_tracker.timestamp_mat));
+        timestamp_min = min(min(tracer.detectioncount_tracker.timestamp_mat));
+
+        figure('Name','Tracker count')
+        stairs(tracer.detectioncount_tracker.timestamp_mat', tracer.detectioncount_tracker.count_mat', 'linewidth', LINEWIDTH)
+        title('Tracker count (TrackerObjects per buffer)','fontsize',FONTSIZE)
+        xlabel('time (seconds)','fontsize',FONTSIZE)
+        ylabel('Number of detections','fontsize',FONTSIZE)
+        xlim([timestamp_min,timestamp_max])
+        ylim([0, max(1, max(max(tracer.detectioncount_tracker.count_mat))) + 1])
+        if (0 == strcmp(legend_location,'extern'))
+            legend(str2latex(tracer.detectioncount_tracker.pad_name_list),'Location',legend_location)
+        end
+
+        if (TRUE == savefig)
+            disp('Save detectioncount_tracker figure...')
+            switch format
+                case 'pdf'
+                    print tracer -dpdf -append
+                case 'png'
+                    print('detectioncount_tracker','-dpng');
+                otherwise
+                    printf('octave: WARN: %s is not supported',format)
+            end
+        end
+        if (1 == strcmp(legend_location,'extern'))
+            plot_legend(tracer.detectioncount_tracker.pad_name_list,'Tracker count legend',savefig,'detectioncount_tracker_legend',format)
         end
     end
 
