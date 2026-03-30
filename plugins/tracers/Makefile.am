@@ -35,16 +35,20 @@ libgstsharktracers_la_SOURCES = \
 	gstqueuelevel.c \
 	gstbitrate.c \
 	gstbuffer.c \
-	gstperiodictracer.c
+	gstperiodictracer.c \
+	gstdetectioncount.c \
+	gstrangetime.c
 
 libgstsharktracers_la_CFLAGS = \
 	$(GST_SHARK_OBJ_CFLAGS) \
 	$(GST_CFLAGS) \
+	$(NVDS_CFLAGS) \
 	-DGST_USE_UNSTABLE_API
 
 libgstsharktracers_la_LIBADD = \
 	$(GST_SHARK_OBJ_LIBS) \
 	$(GST_LIBS) \
+	$(NVDS_LIBS) \
 	libgstshark.la
 
 libgstsharktracers_la_LDFLAGS = \
@@ -69,7 +73,9 @@ noinst_HEADERS = \
 	gstbitrate.h \
 	gstbuffer.h \
 	gstsharktracer.h \
-	gstperiodictracer.h
+	gstperiodictracer.h \
+	gstdetectioncount.h \
+	gstrangetime.h
 
 CLEANFILES = *.gcno *.gcda *.gcov *.gcov.out
 

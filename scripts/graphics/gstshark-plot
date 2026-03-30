@@ -189,14 +189,18 @@ do
     awk '{gsub(",",""); print}' ${tracer}.tmp > ${tracer}.mat
 done
 
-# Parse detectioncount: fields are pad (col 10), pts (col 13), count (col 16).
-# We use the pad as the series name and count as the plotted value.
+# Parse detectioncount: fields are pad (col 10), detector_count (col 16),
+# tracker_count (col 19).  Produce two .mat files so each can be plotted.
 for tracer in "${parser_detectioncount[@]}"
 do
     echo "Loading ${tracer} events..."
     grep -w ${tracer} datastream.log > ${tracer}.log
-    awk '{print $1,$10,$16}' ${tracer}.log > ${tracer}.tmp
-    awk '{gsub(",",""); print}' ${tracer}.tmp > ${tracer}.mat
+    # detector_count
+    awk '{print $1,$10,$16}' ${tracer}.log > ${tracer}_detector.tmp
+    awk '{gsub(",",""); print}' ${tracer}_detector.tmp > ${tracer}_detector.mat
+    # tracker_count
+    awk '{print $1,$10,$19}' ${tracer}.log > ${tracer}_tracker.tmp
+    awk '{gsub(",",""); print}' ${tracer}_tracker.tmp > ${tracer}_tracker.mat
 done
 
 # Create plots
@@ -229,5 +233,7 @@ done
 
 for tracer in "${parser_detectioncount[@]}"
 do
-    rm ${tracer}.log ${tracer}.tmp ${tracer}.mat -f
+    rm ${tracer}.log -f
+    rm ${tracer}_detector.tmp ${tracer}_detector.mat -f
+    rm ${tracer}_tracker.tmp ${tracer}_tracker.mat -f
 done
