@@ -144,7 +144,11 @@ def _section_graph(graph, lines, graph_role, line_role, plot_data):
     return h
 
 
-def build_report(data, by_from=False):
+def build_sections(data, by_from=False):
+    """Return (section HTML lines, modal PLOT_DATA) for every graph.
+
+    gstshark-report.py embeds these in the processing report (--interlatency).
+    """
     graph_role, line_role = ("from_pad", "to_pad") if by_from else ("to_pad", "from_pad")
 
     plot_data = {}
@@ -159,6 +163,11 @@ def build_report(data, by_from=False):
         for s in entry["s"]:
             if len(s["d"]) > MAX_PTS:
                 s["d"] = s["d"][::len(s["d"]) // MAX_PTS]
+    return sections, plot_data
+
+
+def build_report(data, by_from=False):
+    sections, plot_data = build_sections(data, by_from=by_from)
 
     scripts_html = ('<script>var PLOT_DATA='
                     + json.dumps(plot_data, separators=(',', ':'))

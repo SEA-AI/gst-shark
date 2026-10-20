@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import importlib.util
 import os
 import re
 import subprocess
@@ -310,6 +311,30 @@ def parse_log(text, filter_pattern=None):
     }
 
 
+def _interlatency_sections(ctf_dir, include):
+    """Return (section HTML lines, PLOT_DATA) for an interlatency trace.
+
+    The interlatency tracer is usually recorded in its own run, because its
+    overhead skews the other tracers, so it comes from a separate CTF dir.
+    """
+    if not os.path.isdir(ctf_dir):
+        sys.exit(f"Error: interlatency directory '{ctf_dir}' is not a directory")
+    # gstshark-interlatency.py is not importable by name because of the dash
+    spec = importlib.util.spec_from_file_location(
+        "gstshark_interlatency",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "gstshark-interlatency.py"))
+    interlatency = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(interlatency)
+
+    data = interlatency.parse_interlatency(run_babeltrace(ctf_dir),
+                                           include=[re.compile(p) for p in include])
+    if not data:
+        print("Warning: no interlatency data found; skipping the interlatency section.")
+        return [], {}
+    sections, plot_data = interlatency.build_sections(data)
+    return ['<h2>Interlatency (source → pad)</h2>'] + sections, plot_data
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -337,6 +362,19 @@ def main():
         "-o", "--output",
         default=None,
         help="Write the report to FILE instead of auto-generated path",
+    )
+    parser.add_argument(
+        "--interlatency",
+        default=None,
+        metavar="CTF_DIR",
+        help="CTF trace directory of an interlatency run; its source → pad latency is added to the report",
+    )
+    parser.add_argument(
+        "--interlatency-include",
+        action="append",
+        default=[],
+        metavar="PATTERN",
+        help="Keep only interlatency entries whose from_pad or to_pad matches this regex (repeatable)",
     )
     args = parser.parse_args()
 
@@ -368,8 +406,11 @@ def main():
 
     filt = re.compile(args.filter) if args.filter else None
     data = parse_log(raw, filter_pattern=filt)
+    il_sections, il_plot_data = (_interlatency_sections(args.interlatency, args.interlatency_include)
+                                 if args.interlatency else ([], {}))
     report = build_report(data, pipeline_svg=pipeline_svg, pipeline_order=pipeline_order,
-                          queue_names=queue_names)
+                          queue_names=queue_names, extra_sections=il_sections,
+                          extra_plot_data=il_plot_data)
 
     output = args.output
     if not output:

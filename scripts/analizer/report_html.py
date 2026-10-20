@@ -471,11 +471,14 @@ def build_summary(data, pipeline_order=None, queue_names=None):
     return "\n".join(lines) + "\n"
 
 
-def build_report(data, pipeline_svg=None, pipeline_order=None, queue_names=None):
+def build_report(data, pipeline_svg=None, pipeline_order=None, queue_names=None,
+                 extra_sections=None, extra_plot_data=None):
     """Build a complete HTML report from parsed tracer data.
 
     Loads templates from the templates/ directory, generates dynamic
-    section HTML, and assembles the final page.
+    section HTML, and assembles the final page. extra_sections (HTML lines)
+    are appended after the built-in sections, and extra_plot_data is merged
+    into the modal chart data.
     """
     det = data["detection"]
     fr = data["framerate"]
@@ -508,6 +511,7 @@ def build_report(data, pipeline_svg=None, pipeline_order=None, queue_names=None)
                                       queue_names=all_queue_names))
     sections.extend(_section_queues(pt, ql, queue_order))
     sections.extend(_section_rangetime(rt))
+    sections.extend(extra_sections or [])
     sections_html = "\n".join(sections)
 
     # Load templates
@@ -551,6 +555,7 @@ def build_report(data, pipeline_svg=None, pipeline_order=None, queue_names=None)
                 plot_data[slug] = {"t": title, "y": charts[0]["y"], "s": charts[0]["s"]}
             else:
                 plot_data[slug] = {"t": title, "charts": charts}
+    plot_data.update(extra_plot_data or {})
     plot_data_script = ('<script>var PLOT_DATA='
                         + json.dumps(plot_data, separators=(',', ':'))
                         + ';</script>')
