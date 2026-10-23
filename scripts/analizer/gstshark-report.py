@@ -154,7 +154,8 @@ def extract_pipeline_subgraph(dot_content):
                 topo_q.append(succ)
 
     # --- 8. Identify GstQueue elements on path from DOT labels ---
-    queue_name_re = re.compile(r'label\s*=\s*"GstQueue[^"]*\\n([^"]+)"')
+    # The element name is the label's second line: "GstQueue\n<name>\n[>]\n<properties>..."
+    queue_name_re = re.compile(r'label\s*=\s*"GstQueue\\n([^"\\]+)')
     queue_names = {m.group(1).strip() for m in queue_name_re.finditer(dot_content)}
     # Keep only those that are actually on the path
     path_names = set(elements[u] for u in on_path)
